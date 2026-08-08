@@ -1,63 +1,45 @@
 [package]
-edition      = "2024"
-name         = "brusbee"
+edition = "2024"
+name = "brusbee"
 rust-version = "1.88"
-version      = "0.1.0"
+version = "0.1.0"
 
 [[bin]]
 name = "brusbee"
 path = "./src/bin/main.rs"
 
 [dependencies]
-esp-hal = { version = "~1.1.0", features = ["esp32c5", "unstable"] }
-
-esp-rtos = { version = "0.3.0", features = [
-  "embassy",
-  "esp-alloc",
-  "esp-radio",
-  "esp32c5",
-] }
-
-esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32c5"] }
-
-embassy-net = { version = "0.9.1", features = [
+edge-dhcp = "0.7.0"
+edge-nal = "0.6.0"
+edge-nal-embassy = "0.8.1"
+embassy-executor = "0.10.0"
+embassy-net = { version = "0.8.0", features = [ # TODO: update to 0.9 once edge-nal allows
   "dhcpv4",
   "medium-ethernet",
   "tcp",
   "udp",
 ] }
-embedded-io = "0.7.1"
-embedded-io-async = "0.7.0"
-esp-alloc = "0.10.0"
-# for more networking protocol support see https://crates.io/crates/edge-net
-bt-hci = "0.8.0"
-embassy-executor = { version = "0.10.0", features = [] }
 embassy-time = "0.5.0"
-esp-radio = { version = "0.18.0", features = [
-  "ble",
-  "coex",
-  "esp-alloc",
-  "esp32c5",
-  "unstable",
-  "wifi",
-] }
-smoltcp = { version = "0.13.0", default-features = false, features = [
-  "medium-ethernet",
-  "multicast",
-  "proto-dhcpv4",
-  "proto-dns",
-  "proto-ipv4",
-  "socket-dns",
-  "socket-icmp",
-  "socket-raw",
-  "socket-tcp",
-  "socket-udp",
-] }
-trouble-host = { version = "0.6.0", features = ["gatt"] }
+embedded-io-async = "0.7"
+esp-alloc = "0.10.0"
+esp-backtrace = { version = "0.19.0", features = ["panic-handler", "println"] }
+esp-bootloader-esp-idf = "0.5.0"
+esp-hal = { version = "1.1.2", features = ["log-04", "unstable"] }
+esp-println = { version = "0.17.0", features = ["log-04"] }
+esp-rtos = { version = "0.3.0", features = ["esp-radio", "embassy", "log-04"] }
+esp-radio = { version = "1.0.0-beta.0", features = ["log-04", "wifi"] }
+log = "0.4.27"
+static_cell = "2.1.0"
 
-critical-section = "1.2.0"
-static_cell      = "2.1.1"
-
+[features]
+default = ["esp32c5"]
+esp32c5 = [
+  "esp-backtrace/esp32c5",
+  "esp-bootloader-esp-idf/esp32c5",
+  "esp-hal/esp32c5",
+  "esp-rtos/esp32c5",
+  "esp-radio/esp32c5",
+]
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.dev]
@@ -66,7 +48,7 @@ static_cell      = "2.1.1"
 opt-level = "s"
 
 [profile.release]
-codegen-units = 1     # LLVM can perform better optimizations using a single thread
-debug         = 2     # prefer slower builds but better debugging experience
-lto           = 'fat'
-opt-level     = 's'
+codegen-units = 1 # LLVM can perform better optimizations using a single thread
+debug = 2         # prefer slower builds but better debugging experience
+lto = 'fat'
+opt-level = 's'
