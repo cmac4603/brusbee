@@ -1,6 +1,6 @@
 //! Webserver running on brusbee.
 use esp_alloc as _;
-use picoserve::{AppBuilder, AppRouter, routing::get};
+use picoserve::{AppBuilder, AppRouter, routing::get_service};
 
 pub struct AppProps;
 
@@ -8,7 +8,25 @@ impl AppBuilder for AppProps {
     type PathRouter = impl picoserve::routing::PathRouter;
 
     fn build_app(self) -> picoserve::Router<Self::PathRouter> {
-        picoserve::Router::new().route("/", get(|| async move { "Hello World" }))
+        picoserve::Router::new()
+            .route(
+                "/",
+                get_service(picoserve::response::File::html(include_str!(
+                    "./assets/index.html"
+                ))),
+            )
+            .route(
+                "/style.css",
+                get_service(picoserve::response::File::css(include_str!(
+                    "./assets/output.css"
+                ))),
+            )
+            .route(
+                "/htmx.min.js",
+                get_service(picoserve::response::File::javascript(include_str!(
+                    "./assets/htmx.min.js"
+                ))),
+            )
     }
 }
 
