@@ -19,18 +19,8 @@ use picoserve::{AppBuilder, AppRouter, make_static};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-// When you are okay with using a nightly compiler it's better to use https://docs.rs/static_cell/2.1.0/static_cell/macro.make_static.html
-macro_rules! mk_static {
-    ($t:ty,$val:expr) => {{
-        static STATIC_CELL: static_cell::StaticCell<$t> = static_cell::StaticCell::new();
-        #[deny(unused_attributes)]
-        let x = STATIC_CELL.uninit().write(($val));
-        x
-    }};
-}
-
 const GW_IP_ADDR_ENV: &str = "1.2.3.4";
-const SSID: &str = "Free Wifi";
+const SSID: &str = "Brusbee";
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) {
@@ -73,7 +63,7 @@ async fn main(spawner: Spawner) {
         config,
         // 1 socket for dns, 1 for dhcp and 2 for the webserver
         // 1 + 1 + 2 = 4 :bicep:
-        mk_static!(StackResources<4>, StackResources::<4>::new()),
+        make_static!(StackResources<4>, StackResources::<4>::new()),
         seed,
     );
 
