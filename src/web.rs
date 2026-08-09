@@ -14,10 +14,9 @@ impl AppBuilder for AppProps {
 
 pub static CONFIG: picoserve::Config = picoserve::Config::const_default().keep_connection_alive();
 
-// NOTE: esp32c5 on lilygo t-dongle only has one socket available for the app
-// after AP is initialized as well? need to research, other chipsets might have
-// more sockets  available
-pub const WEB_TASK_POOL_SIZE: usize = 1;
+// tied to how many sockets are created in the embassy-net network stack
+// passed into [web_task]
+pub const WEB_TASK_POOL_SIZE: usize = 2;
 
 #[embassy_executor::task(pool_size = WEB_TASK_POOL_SIZE)]
 pub async fn web_task(

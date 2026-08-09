@@ -5,9 +5,7 @@ use core::{net::Ipv4Addr, str::FromStr};
 
 use brusbee::web::{AppProps, WEB_TASK_POOL_SIZE, web_task};
 use embassy_executor::Spawner;
-use embassy_net::{
-    IpListenEndpoint, Ipv4Cidr, Runner, Stack, StackResources, StaticConfigV4, tcp::TcpSocket,
-};
+use embassy_net::{Ipv4Cidr, Runner, Stack, StackResources, StaticConfigV4};
 use embassy_time::{Duration, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
@@ -15,7 +13,7 @@ use esp_hal::{
     clock::CpuClock, interrupt::software::SoftwareInterruptControl, ram, rng::Rng,
     timer::timg::TimerGroup,
 };
-use esp_println::{print, println};
+use esp_println::println;
 use esp_radio::wifi::{Config, ControllerConfig, Interface, WifiController, ap::AccessPointConfig};
 use picoserve::{AppBuilder, AppRouter, make_static};
 
@@ -69,20 +67,19 @@ async fn main(spawner: Spawner) {
     let rng = Rng::new();
     let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
-    // init network stack
+    // initialize network stack
     let (stack, runner) = embassy_net::new(
         device,
         config,
-        mk_static!(StackResources<3>, StackResources::<3>::new()),
+        // 1 socket for dns, 1 for dhcp and 2 for the webserver
+        // 1 + 1 + 2 = 4 :bicep:
+        mk_static!(StackResources<4>, StackResources::<4>::new()),
         seed,
     );
 
     spawner.spawn(connection(controller).unwrap());
     spawner.spawn(net_task(runner).unwrap());
     spawner.spawn(run_dhcp(stack, GW_IP_ADDR_ENV).unwrap());
-
-    let mut rx_buffer = [0; 1536];
-    let mut tx_buffer = [0; 1536];
 
     println!("Connect to the AP `{SSID}` and point your browser to http://{GW_IP_ADDR_ENV}:8080/");
     println!("DHCP is enabled so there's no need to configure a static IP, just in case:");
@@ -92,9 +89,6 @@ async fn main(spawner: Spawner) {
     stack
         .config_v4()
         .inspect(|c| println!("ipv4 config: {c:?}"));
-
-    let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-    socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
 
     let app = make_static!(AppRouter<AppProps>, AppProps.build_app());
 
