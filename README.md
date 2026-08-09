@@ -12,10 +12,17 @@ Use [`bacon`](https://dystroy.org/bacon/) and the default job run should flash t
 bacon
 ```
 
+If `bacon` is not installed, you can use the Makefile:
+
+```bash
+make run
+```
+
 ## TODO
 
 - [x] Create wifi AP
-- [ ] Admin page with [picoserve](https://crates.io/crates/picoserve)
+- [x] Webserver running with [picoserve](https://crates.io/crates/picoserve)
+- [ ] Admin page
 - [ ] Run a command on host as if HID keyboard
 - [ ] Captive portal
 - [ ] Run Duckyscript (unlikely to get to, but let's see how it goes)
