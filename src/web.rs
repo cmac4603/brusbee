@@ -1,7 +1,8 @@
+//! Webserver running on brusbee.
 use esp_alloc as _;
-use picoserve::{routing::get, AppBuilder, AppRouter};
+use picoserve::{AppBuilder, AppRouter, routing::get};
 
-struct AppProps;
+pub struct AppProps;
 
 impl AppBuilder for AppProps {
     type PathRouter = impl picoserve::routing::PathRouter;
@@ -11,12 +12,15 @@ impl AppBuilder for AppProps {
     }
 }
 
-static CONFIG: picoserve::Config = picoserve::Config::const_default().keep_connection_alive();
+pub static CONFIG: picoserve::Config = picoserve::Config::const_default().keep_connection_alive();
 
-const WEB_TASK_POOL_SIZE: usize = 8;
+// NOTE: esp32c5 on lilygo t-dongle only has one socket available for the app
+// after AP is initialized as well? need to research, other chipsets might have
+// more sockets  available
+pub const WEB_TASK_POOL_SIZE: usize = 1;
 
 #[embassy_executor::task(pool_size = WEB_TASK_POOL_SIZE)]
-async fn web_task(
+pub async fn web_task(
     task_id: usize,
     stack: embassy_net::Stack<'static>,
     app: &'static AppRouter<AppProps>,

@@ -3,6 +3,7 @@
 
 use core::{net::Ipv4Addr, str::FromStr};
 
+use brusbee::web::{AppProps, WEB_TASK_POOL_SIZE, web_task};
 use embassy_executor::Spawner;
 use embassy_net::{
     IpListenEndpoint, Ipv4Cidr, Runner, Stack, StackResources, StaticConfigV4, tcp::TcpSocket,
@@ -16,6 +17,8 @@ use esp_hal::{
 };
 use esp_println::{print, println};
 use esp_radio::wifi::{Config, ControllerConfig, Interface, WifiController, ap::AccessPointConfig};
+use picoserve::{AppBuilder, AppRouter, make_static};
+
 esp_bootloader_esp_idf::esp_app_desc!();
 
 // When you are okay with using a nightly compiler it's better to use https://docs.rs/static_cell/2.1.0/static_cell/macro.make_static.html
@@ -32,7 +35,7 @@ const GW_IP_ADDR_ENV: &str = "1.2.3.4";
 const SSID: &str = "Free Wifi";
 
 #[esp_rtos::main]
-async fn main(spawner: Spawner) -> ! {
+async fn main(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
@@ -44,8 +47,7 @@ async fn main(spawner: Spawner) -> ! {
     let sw_int = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_int.software_interrupt0);
 
-    let access_point_config =
-        Config::AccessPoint(AccessPointConfig::default().with_ssid(SSID));
+    let access_point_config = Config::AccessPoint(AccessPointConfig::default().with_ssid(SSID));
 
     println!("Starting wifi");
     let device = esp_radio::wifi::Interface::access_point();
@@ -82,9 +84,7 @@ async fn main(spawner: Spawner) -> ! {
     let mut rx_buffer = [0; 1536];
     let mut tx_buffer = [0; 1536];
 
-    println!(
-        "Connect to the AP `{SSID}` and point your browser to http://{GW_IP_ADDR_ENV}:8080/"
-    );
+    println!("Connect to the AP `{SSID}` and point your browser to http://{GW_IP_ADDR_ENV}:8080/");
     println!("DHCP is enabled so there's no need to configure a static IP, just in case:");
 
     stack.wait_config_up().await;
@@ -95,75 +95,11 @@ async fn main(spawner: Spawner) -> ! {
 
     let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
     socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
-    loop {
-        println!("Wait for connection...");
-        let r = socket
-            .accept(IpListenEndpoint {
-                addr: None,
-                port: 8080,
-            })
-            .await;
-        println!("Connected...");
 
-        if let Err(e) = r {
-            println!("connect error: {:?}", e);
-            continue;
-        }
+    let app = make_static!(AppRouter<AppProps>, AppProps.build_app());
 
-        use embedded_io_async::Write;
-
-        let mut buffer = [0u8; 1024];
-        let mut pos = 0;
-        loop {
-            match socket.read(&mut buffer).await {
-                Ok(0) => {
-                    println!("read EOF");
-                    break;
-                }
-                Ok(len) => {
-                    let to_print =
-                        unsafe { core::str::from_utf8_unchecked(&buffer[..(pos + len)]) };
-
-                    if to_print.contains("\r\n\r\n") {
-                        print!("{}", to_print);
-                        println!();
-                        break;
-                    }
-
-                    pos += len;
-                }
-                Err(e) => {
-                    println!("read error: {:?}", e);
-                    break;
-                }
-            };
-        }
-
-        let r = socket
-            .write_all(
-                b"HTTP/1.0 200 OK\r\n\r\n\
-            <html>\
-                <body>\
-                    <h1>Hello Rust! Hello SSID!</h1>\
-                </body>\
-            </html>\r\n\
-            ",
-            )
-            .await;
-        if let Err(e) = r {
-            println!("write error: {:?}", e);
-        }
-
-        let r = socket.flush().await;
-        if let Err(e) = r {
-            println!("flush error: {:?}", e);
-        }
-        Timer::after(Duration::from_millis(1000)).await;
-
-        socket.close();
-        Timer::after(Duration::from_millis(1000)).await;
-
-        socket.abort();
+    for task_id in 0..WEB_TASK_POOL_SIZE {
+        spawner.spawn(web_task(task_id, stack, app).unwrap());
     }
 }
 
