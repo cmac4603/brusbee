@@ -18,11 +18,19 @@ If `bacon` is not installed, you can use the Makefile:
 make run
 ```
 
+## Updating styling
+
+The web UI uses [tailwind](https://tailwindcss.com/) & [daisyUI](https://daisyui.com/), to update when adding new classes:
+
+```bash
+npm run build:css
+```
+
 ## TODO
 
 - [x] Create wifi AP
 - [x] Webserver running with [picoserve](https://crates.io/crates/picoserve)
-- [ ] Admin page
+- [x] Homepage with assets
 - [ ] Run a command on host as if HID keyboard
 - [ ] Captive portal
 - [ ] Run Duckyscript (unlikely to get to, but let's see how it goes)
