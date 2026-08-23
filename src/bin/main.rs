@@ -6,12 +6,17 @@ use core::{net::Ipv4Addr, str::FromStr};
 use brusbee::web::{AppProps, WEB_TASK_POOL_SIZE, web_task};
 use embassy_executor::Spawner;
 use embassy_net::{Ipv4Cidr, Runner, Stack, StackResources, StaticConfigV4};
-use embassy_time::{Duration, Timer};
+use embassy_time::{Delay, Duration, Timer};
+use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_sdmmc::SdCard;
 use esp_alloc as _;
 use esp_backtrace as _;
+use esp_hal::gpio::{Level, Output, OutputConfig, Pull};
+use esp_hal::time::Rate;
+use esp_hal::{Async, spi};
 use esp_hal::{
     clock::CpuClock, interrupt::software::SoftwareInterruptControl, ram, rng::Rng,
-    timer::timg::TimerGroup,
+    spi::master::Spi, timer::timg::TimerGroup,
 };
 use esp_println::println;
 use esp_radio::wifi::{Config, ControllerConfig, Interface, WifiController, ap::AccessPointConfig};
@@ -35,6 +40,30 @@ async fn main(spawner: Spawner) {
     let sw_int = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_int.software_interrupt0);
 
+    let spi_bus = Spi::new(
+        peripherals.SPI2,
+        spi::master::Config::default()
+            .with_frequency(Rate::from_khz(400))
+            .with_mode(spi::Mode::_0),
+    )
+    .unwrap()
+    .with_sck(peripherals.GPIO6) // clk
+    .with_mosi(peripherals.GPIO2) // cmd
+    .with_miso(peripherals.GPIO7) // d0
+    .into_async();
+
+    let sd_cs = Output::new(
+        peripherals.GPIO23, // d3
+        Level::High,
+        OutputConfig::default().with_pull(Pull::Up),
+    );
+    let spi_dev = ExclusiveDevice::new(spi_bus, sd_cs, Delay).unwrap();
+    let sdcard = SdCard::new(spi_dev, Delay);
+
+    println!("Init SD card controller and retrieve card size...");
+    let sd_size = sdcard.num_bytes().unwrap();
+    println!("Card size is {} bytes", sd_size);
+
     let access_point_config = Config::AccessPoint(AccessPointConfig::default().with_ssid(SSID));
 
     println!("Starting wifi");
@@ -43,7 +72,7 @@ async fn main(spawner: Spawner) {
         peripherals.WIFI,
         ControllerConfig::default().with_initial_config(access_point_config),
     )
-    .unwrap();
+    .expect("wifi should start up fine");
     println!("Wifi started!");
 
     let gw_ip_addr = Ipv4Addr::from_str(GW_IP_ADDR_ENV).expect("failed to parse gateway ip");
@@ -67,9 +96,15 @@ async fn main(spawner: Spawner) {
         seed,
     );
 
-    spawner.spawn(connection(controller).unwrap());
-    spawner.spawn(net_task(runner).unwrap());
-    spawner.spawn(run_dhcp(stack, GW_IP_ADDR_ENV).unwrap());
+    spawner.spawn(
+        connection(controller, sdcard)
+            .expect("station connection events to access point event should work"),
+    );
+    spawner.spawn(net_task(runner).expect("wifi network stack should run"));
+    spawner.spawn(
+        run_dhcp(stack, GW_IP_ADDR_ENV)
+            .expect("dhcp server should work"),
+    );
 
     println!("Connect to the AP `{SSID}` and point your browser to http://{GW_IP_ADDR_ENV}:8080/");
     println!("DHCP is enabled so there's no need to configure a static IP, just in case:");
@@ -128,8 +163,11 @@ async fn run_dhcp(stack: Stack<'static>, gw_ip_addr: &'static str) {
 }
 
 #[embassy_executor::task]
-async fn connection(controller: WifiController<'static>) {
-    println!("start connection task");
+async fn connection(
+    controller: WifiController<'static>,
+    sdcard: SdCard<ExclusiveDevice<Spi<'static, Async>, Output<'static>, Delay>, Delay>,
+) {
+    println!("Start connection task");
     loop {
         let ev = controller
             .wait_for_access_point_connected_event_async()

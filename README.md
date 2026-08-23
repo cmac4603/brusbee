@@ -1,8 +1,8 @@
 # brusbee
 
-Wifi AP, run things kinda like BadUSB.
+Wifi Targeted Active PMKID Sniffer.
 
-Currently only runs on ESP32C5, but trivial to add more if needed.
+Currently tested on ESP32C5.
 
 ## Running locally
 
