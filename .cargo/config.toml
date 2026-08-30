@@ -2,12 +2,14 @@
 runner = "espflash flash --monitor --chip esp32c5"
 
 [env]
+ESP_RADIO_DUMP_PACKETS = "true"
 
 [build]
 rustflags = [
   # Required to obtain backtraces (e.g. when using the "esp-backtrace" crate.)
   # NOTE: May negatively impact performance of produced code
-  "-C", "force-frame-pointers",
+  "-C",
+  "force-frame-pointers",
 ]
 
 target = "riscv32imac-unknown-none-elf"

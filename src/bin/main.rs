@@ -1,14 +1,22 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
+use alloc::{
+    collections::btree_set::BTreeSet,
+    string::{String, ToString},
+};
+use core::cell::RefCell;
 use core::{net::Ipv4Addr, str::FromStr};
 
 use brusbee::web::{AppProps, WEB_TASK_POOL_SIZE, web_task};
+use critical_section::Mutex;
 use embassy_executor::Spawner;
 use embassy_net::{Ipv4Cidr, Runner, Stack, StackResources, StaticConfigV4};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_hal_bus::spi::ExclusiveDevice;
-use embedded_sdmmc::SdCard;
+use embedded_sdmmc::{SdCard, TimeSource, Timestamp};
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pull};
@@ -19,13 +27,37 @@ use esp_hal::{
     spi::master::Spi, timer::timg::TimerGroup,
 };
 use esp_println::println;
-use esp_radio::wifi::{Config, ControllerConfig, Interface, WifiController, ap::AccessPointConfig};
+use esp_radio::wifi::{
+    Config, ControllerConfig, Interface, WifiController, ap::AccessPointConfig,
+    sniffer::PromiscuousPkt,
+};
+use ieee80211::{match_frames, mgmt_frame::BeaconFrame};
 use picoserve::{AppBuilder, AppRouter, make_static};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 const GW_IP_ADDR_ENV: &str = "1.2.3.4";
 const SSID: &str = "Brusbee";
+
+static KNOWN_SSIDS: Mutex<RefCell<BTreeSet<String>>> = Mutex::new(RefCell::new(BTreeSet::new()));
+
+#[derive(Default)]
+pub struct DummyTimesource();
+
+impl TimeSource for DummyTimesource {
+    // In theory you could use the RTC of the rp2040 here, if you had
+    // any external time synchronizing device.
+    fn get_timestamp(&self) -> Timestamp {
+        Timestamp {
+            year_since_1970: 0,
+            zero_indexed_month: 0,
+            zero_indexed_day: 0,
+            hours: 0,
+            minutes: 0,
+            seconds: 0,
+        }
+    }
+}
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) {
@@ -97,7 +129,7 @@ async fn main(spawner: Spawner) {
     );
 
     spawner.spawn(
-        connection(controller, sdcard)
+        wifi_tasks(controller, sdcard)
             .expect("station connection events to access point event should work"),
     );
     spawner.spawn(net_task(runner).expect("wifi network stack should run"));
@@ -159,12 +191,17 @@ async fn run_dhcp(stack: Stack<'static>, gw_ip_addr: &'static str) {
     }
 }
 
+/// Sets up the sniffer to promiscuous mode & logs connections to AP.
 #[embassy_executor::task]
-async fn connection(
+async fn wifi_tasks(
     controller: WifiController<'static>,
-    sdcard: SdCard<ExclusiveDevice<Spi<'static, Async>, Output<'static>, Delay>, Delay>,
+    _sdcard: SdCard<ExclusiveDevice<Spi<'static, Async>, Output<'static>, Delay>, Delay>,
 ) {
     println!("Start connection task");
+    let mut sniffer = controller.sniffer();
+    // capture all packets on the network, not just those addressed to it
+    sniffer.set_promiscuous_mode(true).unwrap();
+    sniffer.set_receive_cb(match_packets);
     loop {
         let ev = controller
             .wait_for_access_point_connected_event_async()
@@ -180,6 +217,28 @@ async fn connection(
         }
         Timer::after(Duration::from_millis(5000)).await
     }
+}
+
+/// Callback function when a packet is received.
+fn match_packets(packet: PromiscuousPkt<'_>) {
+    let _ = match_frames! {
+        packet.data,
+        beacon = BeaconFrame => {
+            if let Some(ssid) = beacon.ssid() {
+                if critical_section::with(|cs| {
+                    KNOWN_SSIDS.borrow_ref_mut(cs).insert(ssid.to_string())
+                }) {
+                    println!("Found new AP with SSID: {ssid}");
+                    // if let Ok(()) = my_file.write(ssid.as_bytes()) {
+                    //     my_file.flush().unwrap();
+                    //     println!("Written Data");
+                    // } else {
+                    //     println!("Not wrote");
+                    // };
+                }
+            };
+        }
+    };
 }
 
 #[embassy_executor::task]
