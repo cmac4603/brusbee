@@ -53,7 +53,7 @@ async fn main(spawner: Spawner) {
     .into_async();
 
     let sd_cs = Output::new(
-        peripherals.GPIO23, // d3
+        peripherals.GPIO23, // cs
         Level::High,
         OutputConfig::default().with_pull(Pull::Up),
     );
@@ -101,10 +101,7 @@ async fn main(spawner: Spawner) {
             .expect("station connection events to access point event should work"),
     );
     spawner.spawn(net_task(runner).expect("wifi network stack should run"));
-    spawner.spawn(
-        run_dhcp(stack, GW_IP_ADDR_ENV)
-            .expect("dhcp server should work"),
-    );
+    spawner.spawn(run_dhcp(stack, GW_IP_ADDR_ENV).expect("dhcp server should work"));
 
     println!("Connect to the AP `{SSID}` and point your browser to http://{GW_IP_ADDR_ENV}:8080/");
     println!("DHCP is enabled so there's no need to configure a static IP, just in case:");
