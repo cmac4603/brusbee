@@ -47,13 +47,13 @@ async fn main(spawner: Spawner) {
             .with_mode(spi::Mode::_0),
     )
     .unwrap()
-    .with_sck(peripherals.GPIO6) // clk
-    .with_mosi(peripherals.GPIO2) // cmd
-    .with_miso(peripherals.GPIO7) // d0
+    .with_sck(peripherals.GPIO12) // clk
+    .with_mosi(peripherals.GPIO16) // cmd
+    .with_miso(peripherals.GPIO14) // d0
     .into_async();
 
     let sd_cs = Output::new(
-        peripherals.GPIO23, // d3
+        peripherals.GPIO18, // d3
         Level::High,
         OutputConfig::default().with_pull(Pull::Up),
     );
